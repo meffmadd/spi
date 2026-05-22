@@ -1,22 +1,24 @@
 ---
 name: spi-setup
-description: Configure and customize the Docker sandbox for pi. Use when adjusting mount points, adding project-specific bindings, changing the base image, or tweaking the sandbox compose file.
+description: Configure the spi Docker sandbox for pi. Use this skill whenever the user asks to add volume mounts, mount local extensions or directories, change the Docker image, add environment variables, edit the compose file, or modify the sandbox configuration in any way.
 ---
 
 # SPI Sandbox Setup
 
-`spi` runs pi inside Docker. Under the hood it's just `docker compose` — edit the compose file however you like.
+`spi` runs pi inside Docker via `docker compose`. To change the sandbox, edit the compose file.
 
-## How it works
+## Where to edit
 
-`spi` picks a compose file (two-tier, exclusive):
+Two locations. Pick one:
 
-1. `spi-compose.yaml` in `$PWD` — **project-level** (takes over entirely)
-2. `~/.pi/spi-compose.yaml` — **global fallback** (used when no project file)
+1. **Project**: `.pi/spi-compose.yaml` in the current project root — used first if it exists
+2. **Global fallback**: `~/.pi/spi-compose.yaml` — used when no project file
 
-They do **not** merge. A project compose replaces the global one.
+They do **not** merge. A project file replaces the global one completely.
 
-## Global compose (created by `/spi init`)
+## Default compose
+
+The default (created by `/spi init`) looks like this:
 
 ```yaml
 services:
@@ -31,61 +33,58 @@ services:
 
 ## It's just Docker Compose
 
-Edit these files freely. Everything `docker compose` supports works: multiple services, networks, env files, health checks, resource limits, entrypoint overrides, build contexts — anything.
+Anything `docker compose` supports works: custom images, multiple services, networks, env files, health checks, resource limits, entrypoint overrides, build contexts.
 
-### Examples
+### Common tasks
 
-**Use your own image:**
+**Mount a local extension or directory:**
 
-```yaml
-image: registry.example.com/my-pi:latest
-```
-
-**Add project mounts:**
+Add a volume entry under `volumes:` in the compose file:
 
 ```yaml
 volumes:
   - ${PWD}:/workspace
   - ${HOME}/.pi:/root/.pi
-  - ${HOME}/.ssh:/root/.ssh:ro
-  - /home/user/other-repo:/workspace/other-repo
+  - /absolute/host/path:/container/path
 ```
 
-**Set environment variables:**
+Then reference it inside the container. For pi extensions installed as local paths, use container-relative paths in `~/.pi/agent/settings.json`.
 
-```yaml
-environment:
-  - NODE_ENV=development
-  - MY_API_KEY          # pulls from host env
-```
+**Use a custom Docker image:**
+
+Change the `image:` line in the compose file.
 
 **Build from a local Dockerfile:**
 
+Replace `image:` with:
+
 ```yaml
-services:
-  pi:
-    build:
-      context: /path/to/pi-agent-runtime
-    image: pi-agent-runtime
-    volumes:
-      - ${PWD}:/workspace
-      - ${HOME}/.pi:/root/.pi
-    stdin_open: true
-    tty: true
+build:
+  context: /path/to/pi-agent-runtime
+image: pi-agent-runtime
 ```
 
-## Updating the image
+**Add environment variables:**
 
-```bash
-docker pull ghcr.io/meffmadd/pi-agent-runtime:latest
+```yaml
+environment:
+  - MY_VAR=value
+  - SECRET_VAR          # pulls from host env
 ```
 
-Or run `/spi upgrade` inside pi (planned).
+**Mount SSH keys for git:**
+
+```yaml
+volumes:
+  - ${HOME}/.ssh:/root/.ssh:ro
+```
+
+## Updating
+
+To pull the latest registry image: `docker pull ghcr.io/meffmadd/pi-agent-runtime:latest`
 
 ## Troubleshooting
 
-**`spi: docker not found`** — Docker is not installed or not in PATH.
-
-**`spi: no compose file found`** — Run `/spi init` inside pi to create the default compose.
-
-**Mount path not found** — Host paths in `volumes:` must exist.
+- `spi: docker not found` — install Docker
+- `spi: no compose file found` — run `/spi init` inside pi
+- Mount path not found — host paths in `volumes:` must exist
