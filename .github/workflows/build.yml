@@ -8,6 +8,8 @@ on:
     paths:
       - 'Dockerfile'
       - '.github/workflows/build.yml'
+    tags:
+      - 'v*'
 
 env:
   REGISTRY: ghcr.io
@@ -26,6 +28,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Determine pi version
+        id: pi-ver
+        run: |
+          PI=$(npm view @earendil-works/pi-coding-agent version 2>/dev/null || echo "latest")
+          echo "version=$PI" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
@@ -39,11 +47,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Generate pi-versioned tags
+        id: pi-tags
+        run: |
+          PI="${{ steps.pi-ver.outputs.version }}"
+          REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref }}" == refs/tags/v* ]]; then
+            SEMVER="${{ steps.meta.outputs.version }}"
+            echo "tags=${REPO}:v${SEMVER}-pi-${PI}" >> $GITHUB_OUTPUT
+          elif [ "$PI" != "latest" ]; then
+            echo "tags=${REPO}:latest-pi-${PI}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build and push Docker image
         id: push
@@ -54,8 +80,12 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.pi-tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PI_VERSION=${{ steps.pi-ver.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
