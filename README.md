@@ -1,4 +1,4 @@
-# pi-spi
+# spi
 
 `spi` is a Docker-based sandbox around the [Pi](https://github.com/earendil-works/pi-mono) coding agent. Zero host dependencies beyond Docker.
 
